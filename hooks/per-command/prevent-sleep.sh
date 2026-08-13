@@ -1,30 +1,35 @@
 #!/bin/bash
-
-# Prevent Mac from sleeping while Claude is actively working on a response.
-# Starts caffeinate on each prompt submission; kills it when Claude stops.
+#
+# Prevent the Mac from sleeping while Claude is working on a response.
+# Starts caffeinate on each prompt submission; allow-sleep.sh kills it when
+# Claude stops.
+#
+# Each Claude Code session gets its own caffeinate process, keyed by the
+# session id in the hook payload, so concurrent sessions never kill each
+# other's process.
+#
 # Adapted from: https://tngranados.com/blog/preventing-mac-sleep-claude-code/
 
-PID_FILE="/tmp/claude_caffeinate_cmd.pid"
-SESSION_PID_FILE="/tmp/claude_caffeinate_session.pid"
+script_dir="$(cd "$(dirname "$0")" && pwd)"
+. "$script_dir/../lib/caffeinate-common.sh"
 
-# If session-level caffeinate is already running, skip — it's a superset
-if [ -f "$SESSION_PID_FILE" ]; then
-    pid=$(cat "$SESSION_PID_FILE")
-    if ps -p "$pid" > /dev/null 2>&1 && ps -p "$pid" -o args= | grep -q '^caffeinate'; then
-        exit 0
-    fi
+session_key=$(caffeinate_session_key)
+
+caffeinate_init_state
+
+# Session-level caffeinate is a superset, so there is nothing to do here.
+if caffeinate_running "$CAFFEINATE_SESSION_PID_FILE"; then
+    exit 0
 fi
 
-# Kill any existing per-command caffeinate (stale from a previous prompt)
-if [ -f "$PID_FILE" ]; then
-    old_pid=$(cat "$PID_FILE")
-    if ps -p "$old_pid" > /dev/null 2>&1 && ps -p "$old_pid" -o args= | grep -q '^caffeinate'; then
-        kill "$old_pid" 2>/dev/null
-    fi
-    rm -f "$PID_FILE"
-fi
+pid_file="$CAFFEINATE_STATE_DIR/cmd-$session_key.pid"
 
-# Start caffeinate with a timeout (default: 1 hour)
+# Clear anything this session left over from a previous prompt.
+caffeinate_stop "$pid_file"
+
+caffeinate_prune_stale_commands
+
+# Start caffeinate with a timeout (default: 1 hour).
 timeout="${CAFFEINATE_TIMEOUT:-3600}"
 nohup caffeinate -i -t "$timeout" > /dev/null 2>&1 &
-echo $! > "$PID_FILE"
+echo $! > "$pid_file"

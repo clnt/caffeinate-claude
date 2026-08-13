@@ -1,29 +1,24 @@
 #!/bin/bash
-
+#
 # Re-enable Mac sleep when the last Claude Code session ends.
-# Decrements the session counter; only kills caffeinate when it reaches zero.
+# Removes this session's marker, then stops the shared caffeinate process
+# only when no other session still holds one.
+#
+# This runs ungated so a session that started with CLAUDE_STAY_AWAKE set
+# still cleans up if the variable is missing by the time it ends.
 
-COUNTER_FILE="/tmp/claude_caffeinate_session.count"
-PID_FILE="/tmp/claude_caffeinate_session.pid"
+script_dir="$(cd "$(dirname "$0")" && pwd)"
+. "$script_dir/../lib/caffeinate-common.sh"
 
-# Decrement session counter
-count=0
-if [ -f "$COUNTER_FILE" ]; then
-    count=$(cat "$COUNTER_FILE")
-fi
-count=$((count - 1))
-if [ "$count" -le 0 ]; then
-    count=0
-    rm -f "$COUNTER_FILE"
-else
-    echo "$count" > "$COUNTER_FILE"
+session_key=$(caffeinate_session_key)
+
+rm -f "$CAFFEINATE_SESSION_MARKER_DIR/$session_key"
+
+remaining=$(ls -1 "$CAFFEINATE_SESSION_MARKER_DIR" 2>/dev/null | wc -l | tr -d ' ')
+
+if [ "$remaining" -gt 0 ] 2>/dev/null; then
+    exit 0
 fi
 
-# Only kill caffeinate if no sessions remain
-if [ "$count" -eq 0 ] && [ -f "$PID_FILE" ]; then
-    pid=$(cat "$PID_FILE")
-    if ps -p "$pid" > /dev/null 2>&1 && ps -p "$pid" -o args= | grep -q '^caffeinate'; then
-        kill "$pid" 2>/dev/null
-    fi
-    rm -f "$PID_FILE"
-fi
+caffeinate_stop "$CAFFEINATE_SESSION_PID_FILE"
+rmdir "$CAFFEINATE_SESSION_MARKER_DIR" 2>/dev/null

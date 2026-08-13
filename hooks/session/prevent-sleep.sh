@@ -1,31 +1,31 @@
 #!/bin/bash
-
-# Prevent Mac from sleeping while any Claude Code session is running.
-# Uses a reference counter so caffeinate stays alive across multiple sessions.
+#
+# Prevent the Mac from sleeping while any Claude Code session is running.
+# All sessions share one caffeinate process. Each session registers a marker
+# file, and allow-sleep.sh stops caffeinate once the last marker is gone.
 
 [ -z "$CLAUDE_STAY_AWAKE" ] && exit 0
 
-COUNTER_FILE="/tmp/claude_caffeinate_session.count"
-PID_FILE="/tmp/claude_caffeinate_session.pid"
+script_dir="$(cd "$(dirname "$0")" && pwd)"
+. "$script_dir/../lib/caffeinate-common.sh"
 
-# Increment session counter
-count=0
-if [ -f "$COUNTER_FILE" ]; then
-    count=$(cat "$COUNTER_FILE")
-fi
-count=$((count + 1))
-echo "$count" > "$COUNTER_FILE"
+session_key=$(caffeinate_session_key)
 
-# If caffeinate is already running, nothing more to do
-if [ -f "$PID_FILE" ]; then
-    pid=$(cat "$PID_FILE")
-    if ps -p "$pid" > /dev/null 2>&1 && ps -p "$pid" -o args= | grep -q '^caffeinate'; then
-        exit 0
-    fi
-    rm -f "$PID_FILE"
+caffeinate_init_state
+mkdir -p "$CAFFEINATE_SESSION_MARKER_DIR" 2>/dev/null
+
+# One marker per session. Resuming a session rewrites its own marker rather
+# than registering a second claim on the shared process.
+touch "$CAFFEINATE_SESSION_MARKER_DIR/$session_key"
+
+# Another session has already started caffeinate.
+if caffeinate_running "$CAFFEINATE_SESSION_PID_FILE"; then
+    exit 0
 fi
 
-# Start caffeinate with no timeout (runs until killed)
+rm -f "$CAFFEINATE_SESSION_PID_FILE"
+
+# Start caffeinate with no timeout (runs until killed).
 # -d: prevent display sleep  -i: prevent idle sleep
 nohup caffeinate -d -i > /dev/null 2>&1 &
-echo $! > "$PID_FILE"
+echo $! > "$CAFFEINATE_SESSION_PID_FILE"
