@@ -10,10 +10,10 @@ Safe to run with several Claude Code sessions open at once. Each session owns it
 
 ### As a plugin (recommended)
 
-This plugin is published through the [clnt marketplace](https://github.com/clnt/claude-plugins).
+This plugin is published through the [clnt marketplace](https://github.com/clnt/cc).
 
 ```text
-/plugin marketplace add clnt/claude-plugins
+/plugin marketplace add clnt/cc
 /plugin install caffeinate-claude@clnt
 ```
 
@@ -21,7 +21,7 @@ The `owner/repo` shorthand clones over SSH. If you do not have GitHub SSH access
 HTTPS URL instead:
 
 ```text
-/plugin marketplace add https://github.com/clnt/claude-plugins.git
+/plugin marketplace add https://github.com/clnt/cc.git
 ```
 
 Restart Claude Code, then check the hooks are registered with `/hooks`.
