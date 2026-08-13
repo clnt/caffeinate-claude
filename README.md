@@ -1,163 +1,182 @@
 # caffeinate-claude
 
-Prevent your Mac from falling asleep in [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
-remote-control sessions or during long-running commands. Uses the built-in
-MacOS `caffeinate` utility.
+Stop your Mac falling asleep while [Claude Code](https://code.claude.com/docs) is working.
+Wraps the built-in macOS `caffeinate` utility in a set of hooks, shipped as a Claude Code plugin.
+
+Safe to run with several Claude Code sessions open at once. Each session owns its own
+`caffeinate` process, so one session finishing never puts the Mac to sleep underneath another.
+
+## Install
+
+### As a plugin (recommended)
+
+This plugin is published through the [clnt marketplace](https://github.com/clnt/claude-plugins).
+
+```text
+/plugin marketplace add clnt/claude-plugins
+/plugin install caffeinate-claude@clnt
+```
+
+The `owner/repo` shorthand clones over SSH. If you do not have GitHub SSH access, use the
+HTTPS URL instead:
+
+```text
+/plugin marketplace add https://github.com/clnt/claude-plugins.git
+```
+
+Restart Claude Code, then check the hooks are registered with `/hooks`.
+
+Per-command protection works from that point on. Nothing else to configure.
+
+### Manually
+
+Copy the scripts and wire them up yourself if you would rather not use the plugin system.
+
+```bash
+mkdir -p ~/.claude/hooks
+cp -R hooks/lib hooks/per-command hooks/session ~/.claude/hooks/
+chmod +x ~/.claude/hooks/per-command/*.sh ~/.claude/hooks/session/*.sh
+```
+
+The `lib` directory is required. Both strategies source their shared helpers from it.
+
+Then merge one of the example configs into `~/.claude/settings.json`:
+
+- **Per-command only:** [`examples/per-command.json`](examples/per-command.json)
+- **Session only:** [`examples/session.json`](examples/session.json)
+- **Both:** [`examples/combined.json`](examples/combined.json)
+
+Do not run the plugin and a manual copy at the same time. Both would fire on every event.
 
 ## Strategies
 
-### Per-Command (Recommended Default)
+### Per-command (on by default)
 
-Keeps your Mac awake only while Claude is actively working on a response. Useful
-when executing autonomous agents within Claude Code, or kicking off any long-running
-commands where you might step away from the computer.
+Keeps the Mac awake only while Claude is working on a response. Useful for autonomous agents
+and long-running commands you kick off before stepping away from the machine.
 
-Starts `caffeinate` when you submit a prompt, kills it when Claude stops.
+`caffeinate` starts when you submit a prompt and is killed when Claude stops.
 
 - **Hooks:** `UserPromptSubmit` / `Stop`
-- **Timeout:** 1 hour default, configurable via `CAFFEINATE_TIMEOUT` env var
-- **No setup required** — works out of the box
+- **Timeout:** 1 hour by default, set `CAFFEINATE_TIMEOUT` to change it
+- **Sleep type:** idle sleep only (`caffeinate -i`), the display can still turn off
 
-### Session-Level (Opt-In)
+### Session-level (opt in)
 
-Keeps your Mac awake during an entire Claude Code session. Useful for
-[remote-control](https://code.claude.com/docs/en/remote-control)
-sessions where you want the Mac to stay awake even when idle for the
-entire duration of the session.
-
-Uses reference counting so multiple concurrent sessions share a single
-`caffeinate` process — it only terminates when the last session ends.
+Keeps the Mac awake for a whole Claude Code session, including idle time. Useful for
+[remote-control](https://code.claude.com/docs/en/remote-control) sessions.
 
 - **Hooks:** `SessionStart` / `SessionEnd`
-- **Gate:** Only activates when `CLAUDE_STAY_AWAKE=1` is set
+- **Gate:** only runs when `CLAUDE_STAY_AWAKE` is set
+- **Sleep type:** idle and display sleep (`caffeinate -d -i`), no timeout
 
-### Using Both
-
-The two strategies coexist safely:
-
-- **Separate PID files** — per-command uses `/tmp/claude_caffeinate_cmd.pid`,
-  per-session uses `/tmp/claude_caffeinate_session.pid`
-- **Session takes precedence** — when a session-level caffeinate is running,
-  the per-command hook skips starting its own (session-level is a superset)
-- **No conflicts** — each strategy manages its own lifecycle independently
-
-## Installation
-
-### 1. Copy the hook scripts
+Set the variable on the sessions you want it for. A shell alias is the tidiest way:
 
 ```bash
-# Create the hooks directories
-mkdir -p ~/.claude/hooks/per-command
-mkdir -p ~/.claude/hooks/session
-
-# Copy the scripts you want
-# Per-command (recommended):
-cp hooks/per-command/*.sh ~/.claude/hooks/per-command/
-
-# Session-level (optional):
-cp hooks/session/*.sh ~/.claude/hooks/session/
-
-# Make them executable
-chmod +x ~/.claude/hooks/per-command/*.sh
-chmod +x ~/.claude/hooks/session/*.sh
-```
-
-### 2. Configure Claude Code to use the hooks
-
-Add the hook configuration to your `~/.claude/settings.json`. Choose the config
-that matches your setup:
-
-- **Per-command only:** Copy from [`examples/per-command.json`](examples/per-command.json)
-- **Session only:** Copy from [`examples/session.json`](examples/session.json)
-- **Both:** Copy from [`examples/combined.json`](examples/combined.json)
-
-Merge the `hooks` key into your existing `settings.json`. For example, to use
-per-command only:
-
-```json
-{
-  "hooks": {
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "$HOME/.claude/hooks/per-command/prevent-sleep.sh"
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "$HOME/.claude/hooks/per-command/allow-sleep.sh"
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-
-### 3. (Session-level only) Set the environment variable
-
-Session-level hooks are gated behind an environment variable so that they only
-activate when intended, e.g. when going remote and walking away from the computer.
-The most convenient setup is to add an alias to your shell config that you would
-use to start a new remote-control Claude session:
-
-```bash
-# Add to ~/.zshrc or ~/.bashrc
+# ~/.zshrc or ~/.bashrc
 alias claude-remote='CLAUDE_STAY_AWAKE=1 claude --remote-control'
 ```
 
-### 4. (Optional) Customize the per-command timeout
+### Using both
 
-Per-command caffeinate defaults to a 1-hour timeout. Howver, if you work with
-long-running commands that could exceed that, the default timeout can be
-customized by setting the environment variable `CAFFEINATE_TIMEOUT` in your
-shell config (value in seconds):
+The plugin registers all four hooks. Per-command runs everywhere, session-level activates only
+where you set `CLAUDE_STAY_AWAKE`. When a session-level `caffeinate` is running, the per-command
+hook skips its own, because session-level already covers it.
+
+## Concurrent sessions
+
+Both strategies are built for several sessions running at once.
+
+**Per-command** keys its PID file on the session id from the hook payload, so each session
+starts and kills only its own `caffeinate`:
+
+```text
+/tmp/claude-caffeinate/cmd-<session-id>.pid
+```
+
+Session A submitting a prompt does not disturb session B, and session A finishing does not
+release session B's `caffeinate`.
+
+**Session-level** shares one `caffeinate` across every session. Each session writes a marker
+file, and the process is stopped when the last marker is removed:
+
+```text
+/tmp/claude-caffeinate/session.pid
+/tmp/claude-caffeinate/sessions/<session-id>
+```
+
+Markers are keyed per session, so resuming a session does not register a second claim, and two
+sessions starting at the same moment cannot lose each other's claim to a read-modify-write race.
+
+## Configuration
+
+| Variable               | Applies to    | Default                  | Purpose                                          |
+| :--------------------- | :------------ | :----------------------- | :----------------------------------------------- |
+| `CLAUDE_STAY_AWAKE`    | Session-level | unset                    | Set to any value to turn the session strategy on |
+| `CAFFEINATE_TIMEOUT`   | Per-command   | `3600`                   | Seconds before `caffeinate` gives up, per prompt |
+| `CAFFEINATE_STATE_DIR` | Both          | `/tmp/claude-caffeinate` | Where PID and marker files are kept              |
 
 ```bash
-# Add to ~/.zshrc or ~/.bashrc
+# ~/.zshrc or ~/.bashrc
 export CAFFEINATE_TIMEOUT=7200  # 2 hours
 ```
 
-## How It Works
+## How it works
 
-Both strategies use macOS [`caffeinate`](https://ss64.com/mac/caffeinate.html)
-to prevent the system from going to sleep.
+Both strategies drive macOS [`caffeinate`](https://ss64.com/mac/caffeinate.html) to hold off
+sleep, and track the process by PID.
 
-### PID Safety
+### PID safety
 
-When killing a `caffeinate` process, the scripts verify the PID still belongs
-to a `caffeinate` process before sending the signal. This prevents accidentally
-killing an unrelated process if the OS has recycled the PID:
+Before killing anything, the scripts confirm the recorded PID still belongs to a `caffeinate`
+process. An unrelated process that inherited a recycled PID is left alone:
 
 ```bash
-if ps -p "$pid" -o args= | grep -q '^caffeinate'; then
-    kill "$pid" 2>/dev/null
-fi
+ps -p "$pid" -o args= | grep -q '^caffeinate'
 ```
 
-### Reference Counting (Session-Level)
+### Session keys
 
-Multiple concurrent Claude Code sessions share a single `caffeinate` process.
-A counter file tracks active sessions:
+Every hook receives a JSON payload on stdin containing `session_id`. The scripts read it with
+`jq` when it is installed and fall back to text extraction when it is not. The value is stripped
+to `A-Za-z0-9_-` before it reaches a filename, so a hostile or malformed id cannot escape the
+state directory.
 
-1. **Session starts** → counter increments. If caffeinate isn't running, start it.
-2. **Session ends** → counter decrements. If counter hits zero, kill caffeinate.
+When no session id can be read, the scripts fall back to the key `unknown` and behave like the
+original single-session version.
 
-This prevents the race condition where closing one session kills caffeinate while
-another remote session is still active.
+### Stale state
+
+A session killed before its `Stop` hook runs leaves a PID file behind. The per-command hook
+prunes dead entries each time it starts, and the `CAFFEINATE_TIMEOUT` ceiling means an orphaned
+`caffeinate` exits on its own.
+
+Session-level markers have no such ceiling. A session that dies without firing `SessionEnd`
+leaves its marker in place, which holds `caffeinate` open. Clear it by hand if that happens:
+
+```bash
+rm -rf /tmp/claude-caffeinate
+pkill caffeinate
+```
+
+## Tests
+
+`tests/run-tests.sh` drives the hooks with simulated payloads for concurrent sessions, repeat
+prompts, crashed sessions, session resume, and payloads with no session id. It runs against an
+isolated state directory and only ever kills `caffeinate` processes it started itself.
+
+```bash
+./tests/run-tests.sh
+```
 
 ## Credits
 
-Per-command strategy adapted from
+Forked from [bmoeskau/caffeinate-claude](https://github.com/bmoeskau/caffeinate-claude), which
+adapted the per-command strategy from
 [Preventing Mac Sleep with Claude Code](https://tngranados.com/blog/preventing-mac-sleep-claude-code/)
-by Toni Granados, with PID safety improvements and session-level support added.
+by Toni Granados.
+
+This fork adds per-session isolation, plugin packaging, and marker-based session tracking.
 
 ## License
 

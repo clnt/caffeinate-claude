@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "caffeinate-claude",
+  "displayName": "Caffeinate Claude",
+  "version": "1.0.0",
+  "description": "Keeps macOS awake while Claude Code is working. Each session owns its own caffeinate process, so concurrent sessions never cancel each other.",
+  "author": {
+    "name": "Matt Clinton",
+    "url": "https://github.com/clnt"
+  },
+  "homepage": "https://github.com/clnt/caffeinate-claude",
+  "repository": "https://github.com/clnt/caffeinate-claude",
+  "license": "MIT",
+  "keywords": ["macos", "caffeinate", "sleep", "hooks", "remote-control"],
+  "hooks": "./hooks/hooks.json"
+}
