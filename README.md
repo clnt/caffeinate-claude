@@ -24,9 +24,28 @@ HTTPS URL instead:
 /plugin marketplace add https://github.com/clnt/cc.git
 ```
 
-Restart Claude Code, then check the hooks are registered with `/hooks`.
+Restart Claude Code, then check the hooks are registered with `/hooks`. You should see two,
+`UserPromptSubmit` and `Stop`.
 
 Per-command protection works from that point on. Nothing else to configure.
+
+### Session-level, as a separate opt-in
+
+The main plugin never registers `SessionStart` or `SessionEnd`. Leaving a session open
+overnight cannot hold the Mac awake. Install the companion plugin if you want that behaviour:
+
+```text
+/plugin install caffeinate-claude-session@clnt
+```
+
+It ships disabled. Turn it on deliberately:
+
+```bash
+claude plugin enable caffeinate-claude-session
+```
+
+Even then it does nothing until `CLAUDE_STAY_AWAKE` is set on the session, so it takes two
+opt-ins before your Mac stays awake while idle.
 
 ### Manually
 
@@ -61,12 +80,12 @@ and long-running commands you kick off before stepping away from the machine.
 - **Timeout:** 1 hour by default, set `CAFFEINATE_TIMEOUT` to change it
 - **Sleep type:** idle sleep only (`caffeinate -i`), the display can still turn off
 
-### Session-level (opt in)
+### Session-level (opt in, separate plugin)
 
 Keeps the Mac awake for a whole Claude Code session, including idle time. Useful for
 [remote-control](https://code.claude.com/docs/en/remote-control) sessions.
 
-- **Hooks:** `SessionStart` / `SessionEnd`
+- **Hooks:** `SessionStart` / `SessionEnd`, registered by `caffeinate-claude-session` only
 - **Gate:** only runs when `CLAUDE_STAY_AWAKE` is set
 - **Sleep type:** idle and display sleep (`caffeinate -d -i`), no timeout
 
@@ -79,9 +98,9 @@ alias claude-remote='CLAUDE_STAY_AWAKE=1 claude --remote-control'
 
 ### Using both
 
-The plugin registers all four hooks. Per-command runs everywhere, session-level activates only
-where you set `CLAUDE_STAY_AWAKE`. When a session-level `caffeinate` is running, the per-command
-hook skips its own, because session-level already covers it.
+Install both plugins and per-command runs everywhere while session-level activates only where
+you set `CLAUDE_STAY_AWAKE`. When a session-level `caffeinate` is running, the per-command hook
+skips its own, because session-level already covers it.
 
 ## Concurrent sessions
 

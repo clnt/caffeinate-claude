@@ -1,21 +1,21 @@
 {
   "hooks": {
-    "UserPromptSubmit": [
+    "SessionStart": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/per-command/prevent-sleep.sh"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/session/prevent-sleep.sh"
           }
         ]
       }
     ],
-    "Stop": [
+    "SessionEnd": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/per-command/allow-sleep.sh"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/session/allow-sleep.sh"
           }
         ]
       }
