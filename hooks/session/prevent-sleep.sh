@@ -26,6 +26,9 @@ fi
 rm -f "$CAFFEINATE_SESSION_PID_FILE"
 
 # Start caffeinate with no timeout (runs until killed).
-# -d: prevent display sleep  -i: prevent idle sleep
-nohup caffeinate -d -i > /dev/null 2>&1 &
+# $flags is deliberately unquoted so a multi-word CAFFEINATE_FLAGS such as
+# "-d -i" reaches caffeinate as separate arguments.
+flags=$(caffeinate_flags)
+# shellcheck disable=SC2086
+nohup caffeinate $flags > /dev/null 2>&1 &
 echo $! > "$CAFFEINATE_SESSION_PID_FILE"
