@@ -5,9 +5,52 @@
 CAFFEINATE_STATE_DIR="${CAFFEINATE_STATE_DIR:-/tmp/claude-caffeinate}"
 CAFFEINATE_SESSION_PID_FILE="$CAFFEINATE_STATE_DIR/session.pid"
 CAFFEINATE_SESSION_MARKER_DIR="$CAFFEINATE_STATE_DIR/sessions"
+CAFFEINATE_DEFAULT_FLAGS="-dimsu"
 
 caffeinate_init_state() {
     mkdir -p "$CAFFEINATE_STATE_DIR" 2>/dev/null
+}
+
+# Succeeds when the word is a bare caffeinate assertion flag, such as -i or
+# -dims. -t and -w are rejected on purpose: the timeout belongs to
+# CAFFEINATE_TIMEOUT, and -w would fight the pid tracking.
+caffeinate_valid_flag() {
+    local word="$1"
+
+    case "$word" in
+        -*) ;;
+        *) return 1 ;;
+    esac
+
+    case "${word#-}" in
+        "" | *[!dimsu]*) return 1 ;;
+    esac
+
+    return 0
+}
+
+# Prints the assertion flags to start caffeinate with. Reads CAFFEINATE_FLAGS,
+# falling back to the default when it is unset, empty, or holds anything that
+# is not an assertion flag, so a typo cannot silently leave the Mac unprotected.
+caffeinate_flags() {
+    local flags="${CAFFEINATE_FLAGS:-}"
+    local word=""
+
+    if [ -z "$flags" ]; then
+        printf '%s' "$CAFFEINATE_DEFAULT_FLAGS"
+        return
+    fi
+
+    for word in $flags; do
+        if caffeinate_valid_flag "$word"; then
+            continue
+        fi
+
+        printf '%s' "$CAFFEINATE_DEFAULT_FLAGS"
+        return
+    done
+
+    printf '%s' "$flags"
 }
 
 # Reads the hook payload from stdin and prints a filename-safe session key.

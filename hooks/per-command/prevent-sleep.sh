@@ -30,6 +30,10 @@ caffeinate_stop "$pid_file"
 caffeinate_prune_stale_commands
 
 # Start caffeinate with a timeout (default: 1 hour).
+# $flags is deliberately unquoted so a multi-word CAFFEINATE_FLAGS such as
+# "-d -i" reaches caffeinate as separate arguments.
 timeout="${CAFFEINATE_TIMEOUT:-3600}"
-nohup caffeinate -i -t "$timeout" > /dev/null 2>&1 &
+flags=$(caffeinate_flags)
+# shellcheck disable=SC2086
+nohup caffeinate $flags -t "$timeout" > /dev/null 2>&1 &
 echo $! > "$pid_file"

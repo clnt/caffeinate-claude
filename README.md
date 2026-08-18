@@ -78,7 +78,8 @@ and long-running commands you kick off before stepping away from the machine.
 
 - **Hooks:** `UserPromptSubmit` / `Stop`
 - **Timeout:** 1 hour by default, set `CAFFEINATE_TIMEOUT` to change it
-- **Sleep type:** idle sleep only (`caffeinate -i`), the display can still turn off
+- **Sleep type:** display, idle, disk and system sleep (`caffeinate -dimsu`), set
+  `CAFFEINATE_FLAGS` to change it
 
 ### Session-level (opt in, separate plugin)
 
@@ -87,7 +88,7 @@ Keeps the Mac awake for a whole Claude Code session, including idle time. Useful
 
 - **Hooks:** `SessionStart` / `SessionEnd`, registered by `caffeinate-claude-session` only
 - **Gate:** only runs when `CLAUDE_STAY_AWAKE` is set
-- **Sleep type:** idle and display sleep (`caffeinate -d -i`), no timeout
+- **Sleep type:** display, idle, disk and system sleep (`caffeinate -dimsu`), no timeout
 
 Set the variable on the sessions you want it for. A shell alias is the tidiest way:
 
@@ -133,12 +134,43 @@ sessions starting at the same moment cannot lose each other's claim to a read-mo
 | :--------------------- | :------------ | :----------------------- | :----------------------------------------------- |
 | `CLAUDE_STAY_AWAKE`    | Session-level | unset                    | Set to any value to turn the session strategy on |
 | `CAFFEINATE_TIMEOUT`   | Per-command   | `3600`                   | Seconds before `caffeinate` gives up, per prompt |
+| `CAFFEINATE_FLAGS`     | Both          | `-dimsu`                 | Which kinds of sleep to hold off                 |
 | `CAFFEINATE_STATE_DIR` | Both          | `/tmp/claude-caffeinate` | Where PID and marker files are kept              |
 
 ```bash
 # ~/.zshrc or ~/.bashrc
 export CAFFEINATE_TIMEOUT=7200  # 2 hours
+export CAFFEINATE_FLAGS="-i"    # idle sleep only, let the display turn off
 ```
+
+### Sleep flags
+
+`CAFFEINATE_FLAGS` is passed straight to `caffeinate`. The default holds off every kind of
+sleep the tool can reach.
+
+| Flag | Effect                                                           |
+| :--- | :--------------------------------------------------------------- |
+| `-d` | Keeps the display awake                                          |
+| `-i` | Keeps the system from idle sleeping                              |
+| `-m` | Keeps the disk from idle sleeping                                |
+| `-s` | Keeps the system from sleeping at all, honoured only on AC power |
+| `-u` | Declares the user active, and turns the display on if it is off  |
+
+Write them combined (`-dimsu`) or separated (`-d -i -m -s -u`). Both are accepted.
+
+Two flags are worth a deliberate choice. `-d` holds the screen at full brightness for as long
+as the assertion lasts, which costs battery and leaves your work on display. `-u` turns a
+blanked screen back on, so a Mac you walked away from lights up again when Claude starts
+working. Drop either one if you would rather they did not.
+
+Only assertion flags are accepted. `-t` belongs to `CAFFEINATE_TIMEOUT`, and `-w` would fight
+the PID tracking, so both are refused. Anything the hooks do not recognise falls back to the
+default rather than starting a `caffeinate` that exits immediately and leaves the Mac
+unprotected.
+
+With the session strategy there is no `-t`, and `caffeinate` gives a lone `-u` assertion a
+five second life in that case. `-d` is what holds the display awake for the rest of the
+session.
 
 ## How it works
 

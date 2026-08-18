@@ -12,6 +12,10 @@ export CAFFEINATE_STATE_DIR="/tmp/claude-caffeinate-test-$$"
 export CAFFEINATE_TIMEOUT=120
 unset CLAUDE_STAY_AWAKE
 
+# The suite starts real caffeinate processes, so it runs on idle sleep alone.
+# The -dimsu default would hold the display awake and turn it back on.
+export CAFFEINATE_FLAGS=-i
+
 rm -rf "$CAFFEINATE_STATE_DIR"
 failures=0
 
@@ -53,6 +57,21 @@ exists() {
         return
     fi
     echo absent
+}
+
+# Resolves the flags in a subshell so the suite's own CAFFEINATE_FLAGS stays
+# put. Pass no argument to test the unset case.
+flags_for() {
+    (
+        if [ "$#" -eq 0 ]; then
+            unset CAFFEINATE_FLAGS
+        else
+            export CAFFEINATE_FLAGS="$1"
+        fi
+
+        . "$repo_dir/hooks/lib/caffeinate-common.sh"
+        caffeinate_flags
+    )
 }
 
 check() {
@@ -139,6 +158,26 @@ check "falls back to the unknown key" present "$(exists "$CAFFEINATE_STATE_DIR/c
 pid_unknown=$(pid_in "cmd-unknown.pid")
 printf '{}' | "$repo_dir/hooks/per-command/allow-sleep.sh"
 check "unknown key cleans up" dead "$(state "$pid_unknown")"
+
+echo "caffeinate flags"
+
+payload sessionG UserPromptSubmit | CAFFEINATE_FLAGS=-im "$repo_dir/hooks/per-command/prevent-sleep.sh"
+pid_g=$(pid_in "cmd-sessionG.pid")
+check "the flags reach the process" "caffeinate -im -t 120" \
+    "$(ps -p "$pid_g" -o args= | sed 's/^ *//;s/ *$//')"
+payload sessionG Stop | "$repo_dir/hooks/per-command/allow-sleep.sh"
+
+check "unset falls back to the default" -dimsu "$(flags_for)"
+check "empty falls back to the default" -dimsu "$(flags_for "")"
+check "a single flag is honoured" -i "$(flags_for "-i")"
+check "combined flags are honoured" -dims "$(flags_for "-dims")"
+check "separate words are honoured" "-d -i" "$(flags_for "-d -i")"
+check "an unknown flag falls back" -dimsu "$(flags_for "-z")"
+check "a bare dash falls back" -dimsu "$(flags_for "-")"
+check "a flag without a dash falls back" -dimsu "$(flags_for "dims")"
+check "the timeout flag falls back" -dimsu "$(flags_for "-t 99")"
+check "a shell metacharacter falls back" -dimsu "$(flags_for "-i; touch /tmp/caffeinate-pwned")"
+check "one bad word rejects the whole value" -dimsu "$(flags_for "-d -z")"
 
 echo "session id sanitising"
 
